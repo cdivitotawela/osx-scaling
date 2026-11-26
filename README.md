@@ -131,6 +131,14 @@ To check packaging locally without creating or publishing a release:
 
 Files are written to the ignored `dist/` folder. The workflow uses the built-in `GITHUB_TOKEN`; no personal access token or Apple signing credentials are needed. Actions are pinned to commit SHAs, checkout does not persist credentials, and only the publishing job receives release write access. If publication fails, inspect the existing tag/release before retrying; the workflow does not overwrite existing release assets.
 
+For a packaging or workflow failure before publication, fix the release tooling through a pull request, then dispatch the workflow from `main` for the existing tag:
+
+```sh
+gh workflow run release.yml --ref main -f tag=v0.0.1
+```
+
+The workflow checks out application source from that unchanged version tag and packaging tools from the workflow commit, and verifies that the tagged source is an ancestor of `main`. It does not move protected tags. CI exercises packaging on both architectures to catch toolchain compatibility problems before a release. The packaging helper also accepts an optional source-directory argument for testing this arrangement locally.
+
 Repository-wide agent instructions live in [AGENTS.md](AGENTS.md), with references for Claude and GitHub Copilot.
 
 ## Implementation references

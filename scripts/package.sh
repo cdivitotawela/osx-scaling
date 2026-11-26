@@ -1,12 +1,13 @@
 #!/bin/bash
 set -euo pipefail
-cd "$(dirname "$0")/.."
-
 release_version=${1:-}
-if [[ $# -ne 1 || ! "$release_version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
-  echo "Usage: scripts/package.sh vMAJOR.MINOR.PATCH[-prerelease]" >&2
+if [[ $# -lt 1 || $# -gt 2 || ! "$release_version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
+  echo "Usage: scripts/package.sh vMAJOR.MINOR.PATCH[-prerelease] [source-directory]" >&2
   exit 1
 fi
+# Release recovery may use updated packaging tooling with an unchanged source tag.
+release_source=${2:-"$(dirname "$0")/.."}
+cd "$release_source"
 release_arch=$(uname -m)
 case "$release_arch" in
   arm64|x86_64) ;;
@@ -14,7 +15,7 @@ case "$release_arch" in
 esac
 
 ./scripts/build.sh
-lipo -verify_arch "$release_arch" bin/scalectl
+lipo bin/scalectl -verify_arch "$release_arch"
 codesign --verify --strict bin/scalectl
 mkdir -p dist
 release_stage=$(mktemp -d "$PWD/dist/.stage.XXXXXX")
