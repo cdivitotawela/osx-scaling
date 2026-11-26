@@ -35,7 +35,7 @@ jobs:
         run: |
           test "$(uname -m)" = "$EXPECTED_ARCH"
           swift --version
-      - name: Build
-        run: ./scripts/build.sh
+      - name: Build and verify release packaging
+        run: ./scripts/package.sh v0.0.0
       - name: Run checks without modifying displays
         run: ./scripts/check.sh

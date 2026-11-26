@@ -3,16 +3,26 @@ name: Release
 on:
   push:
     tags: ['v[0-9]*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to release using this workflow's packaging tools
+        required: true
+        type: string
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
   build:
+    if: github.event_name == 'push' || github.ref == 'refs/heads/main'
     name: Package ${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
@@ -25,9 +35,24 @@ jobs:
           - runner: macos-15-intel
             arch: x86_64
     steps:
+      - name: Validate requested version
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]
+      - name: Check out release tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: automation
+          persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+          path: source
+          fetch-depth: 0
           persist-credentials: false
+      - name: Verify source belongs to main
+        working-directory: source
+        run: git merge-base --is-ancestor HEAD origin/main
       - name: Check native architecture and compiler
         env:
           EXPECTED_ARCH: ${{ matrix.arch }}
@@ -35,18 +60,17 @@ jobs:
           test "$(uname -m)" = "$EXPECTED_ARCH"
           swift --version
       - name: Build and package tagged version
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: ./scripts/package.sh "$RELEASE_TAG"
+        run: ./automation/scripts/package.sh "$RELEASE_TAG" "$GITHUB_WORKSPACE/source"
       - name: Run checks without modifying displays
+        working-directory: source
         run: ./scripts/check.sh
       - name: Upload release files
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: scalectl-${{ matrix.arch }}
           path: |
-            dist/*.tar.gz
-            dist/*.sha256
+            source/dist/*.tar.gz
+            source/dist/*.sha256
           if-no-files-found: error
           retention-days: 7
 
@@ -66,8 +90,6 @@ jobs:
           merge-multiple: true
           path: dist
       - name: Verify both architectures and checksums
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           for arch in arm64 x86_64; do
             test -f "dist/scalectl-${RELEASE_TAG}-macos-${arch}.tar.gz"
@@ -79,7 +101,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           flags=()
           if [[ "$RELEASE_TAG" == *-* ]]; then
