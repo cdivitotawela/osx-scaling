@@ -1,0 +1,8 @@
+.build/
+.swiftpm/
+bin/
+dist/
+.DS_Store
+__pycache__/
+.scalectl-checks-*/
+*.core
